@@ -5,7 +5,7 @@ the edge node we place at each customer site, the telemetry it collects, and the
 Everything here is open source or cheap, cloud-neutral, and the same for every customer.
 
 The agentic platform (`estate-ops-platform`, separate repo) decides *what* to do. This repo holds *how*:
-it reads `build/catalog.json` to learn which runbooks exist and runs them through Semaphore. Runbooks live
+it reads `build/catalog.json` to learn which runbooks and alerts exist and runs them through Semaphore. Runbooks live
 only here, so there is one tested copy of each.
 
 ## Layout
