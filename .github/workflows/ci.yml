@@ -110,7 +110,8 @@ jobs:
       - name: Validate the edge collector config
         run: |
           curl -sSL "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/otelcol-contrib_${OTELCOL_VERSION}_linux_amd64.tar.gz" | tar -xz otelcol-contrib
-          sudo ./otelcol-contrib validate --config=edge/otel/edge-collector.yaml
+          sudo install -d -o "$USER" /var/lib/otelcol/queue
+          ./otelcol-contrib validate --config=edge/otel/edge-collector.yaml
 
   otel-windows:
     name: OpenTelemetry Windows agent config
