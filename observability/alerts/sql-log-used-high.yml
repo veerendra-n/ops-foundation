@@ -1,0 +1,18 @@
+# Alert specs are tool-neutral; tools/render_openobserve_alerts.py (next slice) turns them into OpenObserve alerts.
+# Metric names follow the OpenTelemetry receivers; OpenObserve stores "a.b.c" as stream "a_b_c".
+id: sql-log-used-high
+title: SQL Server transaction log almost full
+severity: P2
+stream_type: metrics
+stream: sqlserver_transaction_log_usage
+query: >-
+  SELECT tenant_id, host_name, sqlserver_database_name, MAX(value) AS used_pct
+  FROM "sqlserver_transaction_log_usage"
+  GROUP BY tenant_id, host_name, sqlserver_database_name
+  HAVING MAX(value) > 90
+period: 10m
+frequency: 5m
+runbook: sql/log-backup-shrink
+runbook_params:
+  rb_targets: host_name
+  rb_database: sqlserver_database_name

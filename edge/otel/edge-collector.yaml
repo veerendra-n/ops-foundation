@@ -1,0 +1,115 @@
+# OpenTelemetry Collector on the per-site edge node. Agentless first: it polls APIs and receives
+# syslog/SNMP, and accepts OTLP from the few server agents we install. Outbound to OpenObserve only.
+# Values in ${env:...} come from /etc/ops-edge/edge.env, rendered by the OpenBao agent.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  file_storage/queue:
+    directory: /var/lib/otelcol/queue
+    create_directory: true
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  syslog/network:
+    udp:
+      listen_address: 0.0.0.0:5514
+    protocol: rfc3164
+    location: UTC
+  hostmetrics/edge:
+    collection_interval: 60s
+    scrapers:
+      cpu: {}
+      memory: {}
+      filesystem: {}
+      network: {}
+  vcenter:
+    endpoint: https://${env:VCENTER_HOST}
+    username: ${env:VCENTER_USER}
+    password: ${env:VCENTER_PASSWORD}
+    collection_interval: 5m
+    tls:
+      insecure_skip_verify: false
+  # One snmp receiver per device class; device lists are generated from NetBox (tools/netbox_to_otel.py, next slice).
+  snmp/core-switches:
+    collection_interval: 60s
+    endpoint: udp://${env:SNMP_PROBE_TARGET}:161
+    version: v3
+    security_level: auth_priv
+    user: ${env:SNMP_USER}
+    auth_type: SHA
+    auth_password: ${env:SNMP_AUTH_PASSWORD}
+    privacy_type: AES
+    privacy_password: ${env:SNMP_PRIV_PASSWORD}
+    resource_attributes:
+      device.address:
+        scalar_oid: "1.3.6.1.2.1.1.5.0"
+    attributes:
+      interface:
+        oid: "1.3.6.1.2.1.2.2.1.2"
+    metrics:
+      network.interface.oper_status:
+        unit: "1"
+        gauge:
+          value_type: int
+        column_oids:
+          - oid: "1.3.6.1.2.1.2.2.1.8"
+            attributes:
+              - name: interface
+      network.interface.in_errors:
+        unit: "{errors}"
+        sum:
+          aggregation: cumulative
+          monotonic: true
+          value_type: int
+        column_oids:
+          - oid: "1.3.6.1.2.1.2.2.1.14"
+            attributes:
+              - name: interface
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 75
+    spike_limit_percentage: 20
+  resource/tenant:
+    attributes:
+      - { key: tenant.id, value: "${env:TENANT_ID}", action: upsert }
+      - { key: site.id, value: "${env:SITE_ID}", action: upsert }
+      - { key: edge.node, value: "${env:EDGE_NODE}", action: upsert }
+  batch:
+    send_batch_size: 2048
+    timeout: 10s
+
+exporters:
+  otlphttp/openobserve:
+    endpoint: ${env:OO_ENDPOINT}/api/${env:OO_ORG}
+    headers:
+      Authorization: Basic ${env:OO_AUTH}
+      stream-name: ${env:SITE_ID}
+    sending_queue:
+      enabled: true
+      storage: file_storage/queue
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 0
+
+service:
+  extensions: [health_check, file_storage/queue]
+  pipelines:
+    metrics:
+      receivers: [otlp, hostmetrics/edge, vcenter, snmp/core-switches]
+      processors: [memory_limiter, resource/tenant, batch]
+      exporters: [otlphttp/openobserve]
+    logs:
+      receivers: [otlp, syslog/network]
+      processors: [memory_limiter, resource/tenant, batch]
+      exporters: [otlphttp/openobserve]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/tenant, batch]
+      exporters: [otlphttp/openobserve]

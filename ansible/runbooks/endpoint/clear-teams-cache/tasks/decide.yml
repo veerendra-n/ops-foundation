@@ -1,0 +1,23 @@
+# Pure decision step: reads rb_facts and parameters only. Tested offline by tests/cases.yml.
+- name: Decide whether the remediation can reach the device
+  vars:
+    f: "{{ rb_facts }}"
+  ansible.builtin.set_fact:
+    rb_verdict: >-
+      {%- if (f.matches | int) == 0 -%}
+        escalate::No Intune device named {{ f.device_name }}; it may be managed by Level or not enrolled.
+      {%- elif (f.matches | int) > 1 -%}
+        escalate::{{ f.matches }} Intune devices are named {{ f.device_name }}; pick one by id.
+      {%- elif f.os != 'Windows' -%}
+        escalate::Device runs {{ f.os }}; this remediation is Windows only.
+      {%- elif f.last_sync_hours is none or (f.last_sync_hours | float) > (rb_max_sync_age_hours | float) -%}
+        escalate::Device last checked in {{ f.last_sync_hours }} hours ago; it is probably offline and would not get the fix.
+      {%- else -%}
+        run_remediation::Windows device {{ f.device_name }} ({{ f.user }}) checked in {{ f.last_sync_hours }} hours ago; run the remediation.
+      {%- endif -%}
+
+- name: Record the decision
+  ansible.builtin.set_fact:
+    rb_decision:
+      action: "{{ (rb_verdict | trim).split('::', 1)[0] }}"
+      reason: "{{ (rb_verdict | trim).split('::', 1)[1] }}"

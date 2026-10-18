@@ -1,0 +1,23 @@
+# One directory per customer. Copy this template to customers/<tenant_id>/ at onboarding.
+# Nothing secret goes here: secrets live in OpenBao under secrets_path.
+tenant_id: TENANT_ID              # short, lowercase, stable: matches the NetBox tenant slug and the directory name
+name: Customer display name
+service:
+  tier: standard                  # standard | premium
+  hours: 24x7
+  levels: [L1, L2, L3]
+  domains: [workplace, servers, network, cloud, storage, backup, database, applications]
+endpoint_management: intune       # intune | level | fleet
+identity: hybrid                  # ad | hybrid | entra
+hypervisor: vmware                # vmware | hyperv | none
+clouds: []                        # azure | aws | gcp
+psa:
+  halopsa_client_id: 0            # HaloPSA client (customer) id
+  default_team: Managed Services
+observability:
+  openobserve_org: TENANT_ID      # one OpenObserve organisation per customer
+secrets_path: secret/customers/TENANT_ID
+sites:
+  - id: hq
+    name: Head office
+    edge_node: edge-TENANT_ID-hq

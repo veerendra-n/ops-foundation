@@ -1,0 +1,10 @@
+- name: Restart a stuck Windows print spooler
+  hosts: "{{ rb_targets }}"
+  gather_facts: false
+  vars:
+    rb_dir: "{{ playbook_dir }}"
+    rb_stuck_minutes: 15
+    rb_clear_stuck: true
+    rb_max_crashes: 3
+  roles:
+    - runbook_run

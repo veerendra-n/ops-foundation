@@ -1,0 +1,27 @@
+# Pure decision step: reads rb_facts and parameters only. Tested offline by tests/cases.yml.
+- name: Decide what to do with the spooler
+  vars:
+    f: "{{ rb_facts }}"
+  ansible.builtin.set_fact:
+    rb_verdict: >-
+      {%- if f.start_mode == 'Disabled' -%}
+        escalate::Spooler is disabled on purpose (often PrintNightmare hardening); not starting it.
+      {%- elif f.is_domain_controller | bool -%}
+        escalate::Host is a domain controller; the spooler should not run here.
+      {%- elif (f.crashes_last_hour | int) >= (rb_max_crashes | int) -%}
+        escalate::Spooler crashed {{ f.crashes_last_hour }} times in the last hour; likely a faulty driver, restarting will not hold.
+      {%- elif f.service_state != 'Running' -%}
+        start::Spooler is {{ f.service_state }}; start it.
+      {%- elif (f.jobs_stuck | int) > 0 and rb_clear_stuck | bool -%}
+        restart_and_clear::{{ f.jobs_stuck }} stuck job(s); restart the spooler and remove them.
+      {%- elif (f.jobs_stuck | int) > 0 -%}
+        restart::{{ f.jobs_stuck }} stuck job(s); restart the spooler and keep the jobs.
+      {%- else -%}
+        none::Spooler is running and no jobs are stuck.
+      {%- endif -%}
+
+- name: Record the decision
+  ansible.builtin.set_fact:
+    rb_decision:
+      action: "{{ (rb_verdict | trim).split('::', 1)[0] }}"
+      reason: "{{ (rb_verdict | trim).split('::', 1)[1] }}"

@@ -1,0 +1,26 @@
+# Pure decision step: reads rb_facts and parameters only. Tested offline by tests/cases.yml.
+- name: Decide whether to unlock
+  vars:
+    f: "{{ rb_facts }}"
+    top_source: "{{ (f.lockout_sources | default([]) | first | default({})).computer | default('unknown') }}"
+  ansible.builtin.set_fact:
+    rb_verdict: >-
+      {%- if not (f.found | bool) -%}
+        escalate::No AD account named {{ f.username }}.
+      {%- elif not (f.enabled | bool) -%}
+        escalate::Account is disabled, not locked; re-enabling needs the user's manager or HR.
+      {%- elif f.privileged | bool -%}
+        escalate::Account is privileged; a second engineer must unlock it.
+      {%- elif not (f.locked | bool) -%}
+        none::Account is not locked; the problem is probably the password or MFA.
+      {%- elif (f.lockouts_24h | int) >= (rb_max_lockouts | int) -%}
+        escalate::Locked {{ f.lockouts_24h }} times in 24 hours, mostly from {{ top_source }}; stale credentials or an attack, unlocking would not hold.
+      {%- else -%}
+        unlock::Account is locked ({{ f.lockouts_24h }} lockout(s) in 24 hours, source {{ top_source }}); unlock it.
+      {%- endif -%}
+
+- name: Record the decision
+  ansible.builtin.set_fact:
+    rb_decision:
+      action: "{{ (rb_verdict | trim).split('::', 1)[0] }}"
+      reason: "{{ (rb_verdict | trim).split('::', 1)[1] }}"

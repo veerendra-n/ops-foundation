@@ -1,0 +1,48 @@
+# The one way a runbook runs: guard, gather, decide, act, verify, evidence.
+# A runbook directory provides tasks/gather.yml (sets rb_facts), tasks/decide.yml (sets rb_decision),
+# tasks/act.yml (sets rb_actions) and tasks/verify.yml (sets rb_after and asserts the fix held, or sets
+# rb_pending when the fix is queued on a device that reports back later).
+- name: Run safety checks
+  ansible.builtin.include_role:
+    name: runbook_guard
+
+- name: Diagnose, act and verify
+  block:
+    - name: Gather
+      ansible.builtin.include_tasks: "{{ rb_dir }}/tasks/gather.yml"
+
+    - name: Decide
+      ansible.builtin.include_tasks: "{{ rb_dir }}/tasks/decide.yml"
+
+    - name: Act and verify
+      when:
+        - not rb_dry_run_effective
+        - rb_decision.action not in ['none', 'escalate']
+      block:
+        - name: Act
+          ansible.builtin.include_tasks: "{{ rb_dir }}/tasks/act.yml"
+
+        - name: Verify
+          ansible.builtin.include_tasks: "{{ rb_dir }}/tasks/verify.yml"
+
+    - name: Set outcome
+      ansible.builtin.set_fact:
+        rb_outcome: >-
+          {{ 'escalated' if rb_decision.action == 'escalate' else
+             ('no_action' if rb_decision.action == 'none' else
+             ('dry_run' if rb_dry_run_effective else
+             ('pending_device' if rb_pending | default(false) | bool else 'fixed'))) }}
+  rescue:
+    - name: Mark the run failed
+      ansible.builtin.set_fact:
+        rb_outcome: failed
+        rb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+  always:
+    - name: Emit evidence
+      ansible.builtin.include_role:
+        name: runbook_evidence
+
+- name: Fail the job when the runbook failed
+  ansible.builtin.fail:
+    msg: "{{ rb_error }}"
+  when: rb_outcome == 'failed'

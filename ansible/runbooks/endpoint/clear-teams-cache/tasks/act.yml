@@ -1,0 +1,19 @@
+- name: Run the Teams cache remediation on the device
+  ansible.builtin.uri:
+    url: "{{ graph_base }}/deviceManagement/managedDevices/{{ rb_facts.device_id }}/initiateOnDemandProactiveRemediation"
+    method: POST
+    headers: "{{ graph_headers }}"
+    body_format: json
+    body:
+      scriptPolicyId: "{{ customer_teams_remediation_id }}"
+    status_code: [200, 204]
+  register: rb_act
+  delegate_to: localhost
+
+- name: Record actions
+  ansible.builtin.set_fact:
+    rb_actions:
+      - action: intune_on_demand_remediation
+        device_id: "{{ rb_facts.device_id }}"
+        script_policy_id: "{{ customer_teams_remediation_id }}"
+        http_status: "{{ rb_act.status }}"

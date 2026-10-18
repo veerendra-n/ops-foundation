@@ -1,0 +1,39 @@
+- name: Healthy grow
+  params: { rb_volume: E, rb_increase_gb: 50 }
+  facts: &ok { guest_os: windows, volume: E, volume_size_gb: 200, volume_used_pct: 96, volume_blocked: false, disk_found: true, disk_label: Hard disk 2,
+               disk_backing: FlatVer2, disk_size_gb: 200, snapshots: 0, datastore: DS-PROD-01, datastore_free_gb: 1800, datastore_capacity_gb: 8000 }
+  expect: expand
+
+- name: Snapshot left by backup
+  params: { rb_volume: E, rb_increase_gb: 50 }
+  facts: { <<: *ok, snapshots: 1 }
+  expect: escalate
+  reason_contains: snapshot
+
+- name: Raw device mapping
+  params: { rb_volume: E, rb_increase_gb: 50 }
+  facts: { <<: *ok, disk_backing: RawDiskMappingVer1 }
+  expect: escalate
+
+- name: Cannot map the volume
+  params: { rb_volume: E, rb_increase_gb: 50 }
+  facts: { <<: *ok, disk_found: false }
+  expect: escalate
+  reason_contains: EnableUUID
+
+- name: Recovery partition after the volume
+  params: { rb_volume: C, rb_increase_gb: 20 }
+  facts: { <<: *ok, volume: C, volume_blocked: true }
+  expect: escalate
+
+- name: Too big without a change
+  params: { rb_volume: E, rb_increase_gb: 500 }
+  facts: *ok
+  expect: escalate
+  reason_contains: limit
+
+- name: Datastore would breach reserve
+  params: { rb_volume: E, rb_increase_gb: 150 }
+  facts: { <<: *ok, datastore_free_gb: 1300 }
+  expect: escalate
+  reason_contains: reserve

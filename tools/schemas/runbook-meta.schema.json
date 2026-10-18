@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/veerendra-n/ops-foundation/tools/schemas/runbook-meta.schema.json",
+  "title": "Runbook metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "title", "domain", "summary", "executor", "targets", "risk", "approval", "max_targets", "params", "outcomes", "rollback", "triggers"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "title": {"type": "string", "minLength": 5, "maxLength": 90},
+    "domain": {"enum": ["database", "server", "endpoint", "identity", "virtualisation", "network", "storage", "backup", "cloud", "application"]},
+    "summary": {"type": "string", "minLength": 20},
+    "executor": {"enum": ["ansible-winrm", "ansible-ssh", "ansible-api", "level", "intune"]},
+    "targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "group"],
+      "properties": {
+        "platform": {"enum": ["windows", "linux", "vcenter", "api"]},
+        "group": {"type": "string"},
+        "delegate": {"type": "string"}
+      }
+    },
+    "risk": {"enum": ["low", "medium", "high"]},
+    "approval": {"enum": ["required", "not_required"]},
+    "max_targets": {"type": "integer", "minimum": 1, "maximum": 50},
+    "params": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "required", "description"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^rb_[a-z0-9_]+$"},
+          "type": {"enum": ["string", "integer", "boolean", "enum"]},
+          "required": {"type": "boolean"},
+          "default": {},
+          "choices": {"type": "array"},
+          "description": {"type": "string", "minLength": 10}
+        }
+      }
+    },
+    "outcomes": {"type": "array", "items": {"type": "string"}, "minItems": 2},
+    "rollback": {"type": "string", "minLength": 10},
+    "triggers": {"type": "array", "items": {"type": "string"}},
+    "secrets": {"type": "array", "items": {"type": "string"}},
+    "notes": {"type": "string"}
+  }
+}

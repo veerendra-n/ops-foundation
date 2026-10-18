@@ -1,0 +1,11 @@
+- name: Restart the spooler
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', rb_dir ~ '/tasks/act.ps1') }}"
+    parameters:
+      Clear: "{{ rb_decision.action == 'restart_and_clear' }}"
+      JobIds: "{{ rb_facts.stuck_jobs | default([]) | map(attribute='id') | list }}"
+  register: rb_act
+
+- name: Record actions
+  ansible.builtin.set_fact:
+    rb_actions: "{{ rb_act.output }}"

@@ -1,0 +1,9 @@
+- name: Clear the Microsoft Teams cache on a user's laptop
+  hosts: "{{ rb_targets }}"
+  gather_facts: false
+  vars:
+    rb_dir: "{{ playbook_dir }}"
+    rb_max_sync_age_hours: 24
+    graph_base: https://graph.microsoft.com/beta
+  roles:
+    - runbook_run

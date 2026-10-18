@@ -1,0 +1,4 @@
+# Per-customer Entra app registration. The secret comes from OpenBao, never from this repo.
+graph_tenant_id: "{{ customer_entra_tenant_id }}"
+graph_client_id: "{{ customer_graph_client_id }}"
+graph_client_secret: "{{ lookup('community.hashi_vault.hashi_vault', secrets_path ~ '/graph:client_secret') }}"

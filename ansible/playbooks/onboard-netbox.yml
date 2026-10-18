@@ -1,0 +1,80 @@
+# Onboarding step 1: create the customer in NetBox, our source of truth for inventory.
+# Usage (from Semaphore or locally): ansible-playbook playbooks/onboard-netbox.yml -e customer=<tenant_id>
+# NETBOX_API and NETBOX_TOKEN come from the environment.
+- name: Set up a customer in NetBox
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    customer_file: "{{ playbook_dir }}/../../customers/{{ customer }}/customer.yml"
+    c: "{{ lookup('ansible.builtin.file', customer_file) | from_yaml }}"
+    # NetBox tag rb-<group> places a host in the Ansible group a runbook targets.
+    runbook_tags: [sql-servers, print-servers, ad-pdc, vmware-guests]
+  module_defaults:
+    group/netbox.netbox.netbox:
+      netbox_url: "{{ lookup('ansible.builtin.env', 'NETBOX_API') }}"
+      netbox_token: "{{ lookup('ansible.builtin.env', 'NETBOX_TOKEN') }}"
+  tasks:
+    - name: Check the customer file matches its directory
+      ansible.builtin.assert:
+        that: c.tenant_id == customer
+        fail_msg: "customers/{{ customer }}/customer.yml has tenant_id {{ c.tenant_id }}"
+
+    - name: Create the tenant
+      netbox.netbox.netbox_tenant:
+        data:
+          name: "{{ c.name }}"
+          slug: "{{ c.tenant_id }}"
+        state: present
+
+    - name: Create the sites
+      netbox.netbox.netbox_site:
+        data:
+          name: "{{ c.tenant_id }}-{{ item.id }}"
+          slug: "{{ c.tenant_id }}-{{ item.id }}"
+          description: "{{ item.name }}"
+          tenant: "{{ c.tenant_id }}"
+        state: present
+      loop: "{{ c.sites }}"
+      loop_control:
+        label: "{{ item.id }}"
+
+    - name: Create runbook targeting tags
+      netbox.netbox.netbox_tag:
+        data:
+          name: "rb-{{ item }}"
+          slug: "rb-{{ item }}"
+          description: "Ansible group {{ item | replace('-', '_') }} for runbooks"
+        state: present
+      loop: "{{ runbook_tags }}"
+
+    - name: Create the oxidized tag
+      netbox.netbox.netbox_tag:
+        data:
+          name: oxidized
+          slug: oxidized
+          description: Back up this device's configuration nightly
+        state: present
+
+    - name: Create the VM UUID custom field
+      netbox.netbox.netbox_custom_field:
+        data:
+          name: vm_uuid
+          label: VM UUID
+          type: text
+          object_types: [virtualization.virtualmachine]
+          description: vSphere BIOS UUID, used by vmware/* runbooks
+        state: present
+
+    - name: Create the Oxidized export template
+      netbox.netbox.netbox_export_template:
+        data:
+          name: oxidized
+          object_types: [dcim.device]
+          mime_type: application/json
+          template_code: !unsafe |
+            [{% for d in queryset %}{% if d.primary_ip %}
+            {"name": "{{ d.name }}", "ip": "{{ d.primary_ip.address.ip }}",
+             "model": "{{ d.platform.slug if d.platform else 'ios' }}"}{% if not forloop.last %},{% endif %}
+            {% endif %}{% endfor %}]
+        state: present

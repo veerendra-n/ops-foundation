@@ -1,0 +1,20 @@
+# Offline test of a runbook's decision step against its fixture cases.
+# Usage: ansible-playbook tests/decide.yml -e rb_dir=runbooks/sql/log-backup-shrink
+- name: Test runbook decisions
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    rb_abs: "{{ (playbook_dir ~ '/../' ~ rb_dir) | realpath }}"
+  tasks:
+    - name: Load metadata and cases
+      ansible.builtin.set_fact:
+        rb_meta: "{{ lookup('ansible.builtin.file', rb_abs ~ '/meta.yml') | from_yaml }}"
+        rb_cases: "{{ lookup('ansible.builtin.file', rb_abs ~ '/tests/cases.yml') | from_yaml }}"
+
+    - name: Run each case
+      ansible.builtin.include_tasks: run_case.yml
+      loop: "{{ rb_cases }}"
+      loop_control:
+        loop_var: rb_case
+        label: "{{ rb_case.name }}"

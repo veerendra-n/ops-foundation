@@ -1,0 +1,17 @@
+- name: Read the account again
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', rb_dir ~ '/tasks/gather.ps1') }}"
+    parameters:
+      Username: "{{ rb_username }}"
+  changed_when: false
+  register: rb_verify
+
+- name: Keep the after state
+  ansible.builtin.set_fact:
+    rb_after: "{{ rb_verify.output[0] }}"
+
+- name: Check the account is unlocked
+  ansible.builtin.assert:
+    that:
+      - not (rb_after.locked | bool)
+    fail_msg: "{{ rb_username }} is still locked after Unlock-ADAccount."

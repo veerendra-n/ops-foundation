@@ -1,0 +1,11 @@
+- name: Free a full SQL Server transaction log
+  hosts: "{{ rb_targets }}"
+  gather_facts: false
+  vars:
+    rb_dir: "{{ playbook_dir }}"
+    rb_sql_instance: "."
+    rb_backup_mode: agent_job
+    rb_shrink: true
+    rb_shrink_target_mb: 4096
+  roles:
+    - runbook_run

@@ -1,0 +1,40 @@
+# Keeps an edge node's stack in line with this repo after cloud-init bootstrapped it.
+# Run from Semaphore against the edge node (it can target itself through its own runner).
+- name: Deploy the edge node stack
+  hosts: "{{ rb_targets }}"
+  become: true
+  gather_facts: false
+  vars:
+    edge_src: "{{ playbook_dir }}/../../edge"
+  tasks:
+    - name: Copy the stack definition
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "/opt/ops-edge/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: "{{ edge_src }}/compose/docker-compose.yml", dest: docker-compose.yml }
+        - { src: "{{ edge_src }}/compose/versions.env", dest: .env }
+        - { src: "{{ edge_src }}/compose/openbao-agent.hcl", dest: openbao-agent.hcl }
+        - { src: "{{ edge_src }}/otel/edge-collector.yaml", dest: otel/edge-collector.yaml }
+        - { src: "{{ edge_src }}/oxidized/config.ctmpl", dest: oxidized/config.ctmpl }
+      loop_control:
+        label: "{{ item.dest }}"
+      notify: Recreate the stack
+
+    - name: Apply changes now
+      ansible.builtin.meta: flush_handlers
+
+    - name: Check the collector is healthy
+      ansible.builtin.uri:
+        url: http://127.0.0.1:13133/
+      register: edge_health
+      retries: 12
+      delay: 5
+      until: edge_health.status == 200
+
+  handlers:
+    - name: Recreate the stack
+      ansible.builtin.command:
+        cmd: docker compose --project-directory /opt/ops-edge up -d --remove-orphans --force-recreate
+      changed_when: true

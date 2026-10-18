@@ -1,0 +1,48 @@
+id: vmware/expand-disk
+version: 1.0.0
+title: Grow a full disk on a VMware virtual machine
+domain: virtualisation
+summary: >-
+  For a guest volume running out of space. Maps the Windows drive or Linux mount to its virtual disk by
+  serial number, checks for snapshots, raw device mappings and datastore headroom, grows the VMDK in
+  vCenter and extends the partition and file system inside the guest. Anything it cannot map or prove
+  safe is escalated.
+executor: ansible-api
+targets:
+  platform: vcenter
+  group: vmware_guests
+  delegate: localhost
+risk: medium
+approval: required
+max_targets: 1
+params:
+  - name: rb_volume
+    type: string
+    required: true
+    description: Windows drive letter (E) or Linux mount point (/var/lib/data) that is full.
+  - name: rb_increase_gb
+    type: integer
+    required: true
+    description: How many GB to add to the virtual disk.
+  - name: rb_max_increase_gb
+    type: integer
+    required: false
+    default: 200
+    description: Largest increase this runbook will make without a change record for a bigger one.
+  - name: rb_datastore_reserve_pct
+    type: integer
+    required: false
+    default: 15
+    description: Free space the datastore must keep after the grow, as a percentage of its capacity.
+outcomes: [escalate, expand]
+rollback: >-
+  A grown virtual disk cannot be shrunk. If the increase was wrong, leave the space unallocated in the guest
+  and reclaim it later by migrating the volume; record that on the case.
+triggers:
+  - disk-free-low
+secrets:
+  - vCenter service account limited to the customer's VM folder, with "change disk size" (OpenBao, per tenant)
+  - WinRM or SSH credential for the guest (OpenBao, per tenant)
+notes: >-
+  Mapping needs disk.EnableUUID=TRUE on the VM so the guest sees each VMDK's serial; the onboarding check
+  reports VMs without it. A snapshot left behind by a backup job is the most common reason this escalates.

@@ -1,0 +1,15 @@
+id: print-spooler-stopped
+title: Print spooler stopped or crashed
+severity: P3
+stream_type: logs
+stream: default
+query: >-
+  SELECT tenant_id, host_name, COUNT(*) AS events
+  FROM "default"
+  WHERE event_id IN (7031, 7034) AND body LIKE '%Print Spooler%'
+  GROUP BY tenant_id, host_name
+period: 15m
+frequency: 5m
+runbook: windows/restart-spooler
+runbook_params:
+  rb_targets: host_name

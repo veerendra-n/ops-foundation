@@ -1,0 +1,17 @@
+- name: Grow a full disk on a VMware virtual machine
+  hosts: "{{ rb_targets }}"
+  gather_facts: false
+  vars:
+    rb_dir: "{{ playbook_dir }}"
+    rb_max_increase_gb: 200
+    rb_datastore_reserve_pct: 15
+    rb_guest_os: "{{ 'windows' if ansible_connection | default('') in ['winrm', 'psrp'] else 'linux' }}"
+  module_defaults:
+    group/community.vmware.vmware:
+      hostname: "{{ vcenter_hostname }}"
+      username: "{{ vcenter_username }}"
+      password: "{{ lookup('community.hashi_vault.hashi_vault', secrets_path ~ '/vcenter:password') }}"
+      validate_certs: "{{ vcenter_validate_certs | default(true) }}"
+      datacenter: "{{ vcenter_datacenter }}"
+  roles:
+    - runbook_run

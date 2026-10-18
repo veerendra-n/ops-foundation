@@ -1,0 +1,18 @@
+- name: Back up the log and shrink the file
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', rb_dir ~ '/tasks/act.ps1') }}"
+    parameters:
+      Instance: "{{ rb_sql_instance }}"
+      Database: "{{ rb_database }}"
+      Backup: "{{ rb_decision.action != 'shrink_only' }}"
+      Shrink: "{{ rb_decision.action != 'backup_only' }}"
+      Mode: "{{ rb_backup_mode }}"
+      AgentJob: "{{ rb_agent_job | default('') }}"
+      BackupPath: "{{ rb_backup_path | default('') }}"
+      RunId: "{{ rb_run_id_effective }}"
+      ShrinkTargetMb: "{{ rb_shrink_target_mb | int }}"
+  register: rb_act
+
+- name: Record actions
+  ansible.builtin.set_fact:
+    rb_actions: "{{ rb_act.output }}"

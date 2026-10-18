@@ -1,0 +1,44 @@
+# Pure decision step: reads rb_facts and parameters only, never touches the target.
+# Produces rb_decision {action, reason}. Tested offline by tests/cases.yml.
+- name: Decide how to free the log
+  vars:
+    f: "{{ rb_facts }}"
+    used_mb: "{{ ((f.log_size_mb | float) * (f.log_used_pct | float) / 100) | round | int }}"
+    held_by_other: >-
+      {{ f.log_reuse_wait in ['ACTIVE_TRANSACTION', 'REPLICATION', 'AVAILABILITY_REPLICA', 'DATABASE_MIRRORING',
+                              'ACTIVE_BACKUP_OR_RESTORE', 'OLDEST_PAGE', 'XTP_CHECKPOINT', 'LOG_SCAN'] }}
+    shrink_worthwhile: "{{ (rb_shrink | bool) and (f.log_size_mb | float) > (rb_shrink_target_mb | float) * 1.5 }}"
+    native: "{{ rb_backup_mode == 'native' }}"
+  ansible.builtin.set_fact:
+    rb_verdict: >-
+      {%- if f.hadr_role == 'SECONDARY' -%}
+        escalate::Database is an availability group secondary; free the log on the primary.
+      {%- elif held_by_other | bool -%}
+        escalate::Log is held by {{ f.log_reuse_wait }}; a log backup will not free it.
+      {%- elif f.log_reuse_wait == 'LOG_BACKUP' and f.recovery_model in ['FULL', 'BULK_LOGGED'] -%}
+        {%- if not (native | bool) and not (rb_agent_job | default('')) -%}
+          escalate::Log is waiting for a backup but no SQL Agent job is configured for it.
+        {%- elif native | bool and not (rb_backup_path | default('')) -%}
+          escalate::Native backup mode needs a backup path.
+        {%- elif native | bool and f.backup_target_free_mb is none -%}
+          escalate::Could not read free space on {{ rb_backup_path }}.
+        {%- elif native | bool and (f.backup_target_free_mb | float) < (used_mb | float) * 1.2 + 1024 -%}
+          escalate::Not enough space on the backup target ({{ f.backup_target_free_mb }} MB free, about {{ used_mb }} MB needed).
+        {%- elif shrink_worthwhile | bool -%}
+          backup_and_shrink::Log is waiting for a backup; back it up, then shrink {{ f.log_size_mb }} MB to {{ rb_shrink_target_mb }} MB.
+        {%- else -%}
+          backup_only::Log is waiting for a backup; back it up, no shrink needed.
+        {%- endif -%}
+      {%- elif f.log_reuse_wait in ['NOTHING', 'CHECKPOINT'] and (f.log_used_pct | float) < 50 and shrink_worthwhile | bool -%}
+        shrink_only::Log is reusable but oversized; shrink only.
+      {%- elif f.log_reuse_wait in ['NOTHING', 'CHECKPOINT'] -%}
+        none::Log is reusable and not oversized; nothing to do.
+      {%- else -%}
+        escalate::Unexpected log state {{ f.recovery_model }}/{{ f.log_reuse_wait }}; needs an engineer.
+      {%- endif -%}
+
+- name: Record the decision
+  ansible.builtin.set_fact:
+    rb_decision:
+      action: "{{ (rb_verdict | trim).split('::', 1)[0] }}"
+      reason: "{{ (rb_verdict | trim).split('::', 1)[1] }}"

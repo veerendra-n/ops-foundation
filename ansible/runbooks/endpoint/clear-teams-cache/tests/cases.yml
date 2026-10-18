@@ -1,0 +1,27 @@
+- name: Online Windows laptop
+  params: { rb_device_name: LT-04231 }
+  facts: { matches: 1, device_id: 9f1c, device_name: LT-04231, os: Windows, user: anna@contoso.example, last_sync_hours: 0.4 }
+  expect: run_remediation
+
+- name: Not in Intune
+  params: { rb_device_name: LT-09999 }
+  facts: { matches: 0, device_id: null, device_name: LT-09999, os: null, user: null, last_sync_hours: null }
+  expect: escalate
+  reason_contains: managed by Level
+
+- name: Duplicate device names
+  params: { rb_device_name: LT-04231 }
+  facts: { matches: 2, device_id: 9f1c, device_name: LT-04231, os: Windows, user: anna@contoso.example, last_sync_hours: 0.4 }
+  expect: escalate
+
+- name: Mac
+  params: { rb_device_name: MB-0112 }
+  facts: { matches: 1, device_id: 77aa, device_name: MB-0112, os: macOS, user: ben@contoso.example, last_sync_hours: 1 }
+  expect: escalate
+  reason_contains: Windows only
+
+- name: Offline for three days
+  params: { rb_device_name: LT-04231 }
+  facts: { matches: 1, device_id: 9f1c, device_name: LT-04231, os: Windows, user: anna@contoso.example, last_sync_hours: 72 }
+  expect: escalate
+  reason_contains: offline

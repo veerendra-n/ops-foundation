@@ -1,0 +1,18 @@
+id: disk-free-low
+title: Server volume almost full
+severity: P3
+stream_type: metrics
+stream: system_filesystem_utilization
+query: >-
+  SELECT tenant_id, host_name, mountpoint, MAX(value) AS used
+  FROM "system_filesystem_utilization"
+  WHERE type NOT IN ('tmpfs', 'squashfs', 'overlay')
+  GROUP BY tenant_id, host_name, mountpoint
+  HAVING MAX(value) > 0.92
+period: 15m
+frequency: 5m
+runbook: vmware/expand-disk
+runbook_params:
+  rb_targets: host_name
+  rb_volume: mountpoint
+  # rb_increase_gb is proposed by the agent from growth rate and confirmed by the approver.

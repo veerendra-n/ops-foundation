@@ -1,0 +1,16 @@
+id: ad-account-locked-out
+title: Account locked out (for repeated lockouts and VIP users)
+severity: P4
+stream_type: logs
+stream: default
+query: >-
+  SELECT tenant_id, target_user_name, caller_computer_name, COUNT(*) AS lockouts
+  FROM "default"
+  WHERE event_id = 4740
+  GROUP BY tenant_id, target_user_name, caller_computer_name
+  HAVING COUNT(*) >= 3
+period: 60m
+frequency: 10m
+runbook: identity/unlock-account
+runbook_params:
+  rb_username: target_user_name

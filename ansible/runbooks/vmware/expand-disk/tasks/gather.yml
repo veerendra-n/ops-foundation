@@ -1,0 +1,61 @@
+- name: Read the guest volume (Windows)
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', rb_dir ~ '/tasks/guest_volume.ps1') }}"
+    parameters:
+      Drive: "{{ rb_volume }}"
+  changed_when: false
+  register: rb_guest_win
+  when: rb_guest_os == 'windows'
+
+- name: Read the guest volume (Linux)
+  ansible.builtin.script:
+    cmd: "{{ rb_dir }}/tasks/guest_volume.sh {{ rb_volume | quote }}"
+  changed_when: false
+  register: rb_guest_linux
+  when: rb_guest_os == 'linux'
+
+- name: Read the VM's disks
+  community.vmware.vmware_guest_disk_info:
+    uuid: "{{ vm_uuid }}"
+  register: rb_vm_disks
+  delegate_to: localhost
+
+- name: Read the VM's snapshots
+  community.vmware.vmware_guest_snapshot_info:
+    uuid: "{{ vm_uuid }}"
+  register: rb_vm_snaps
+  delegate_to: localhost
+
+- name: Read datastores
+  community.vmware.vmware_datastore_info:
+  register: rb_datastores
+  delegate_to: localhost
+
+- name: Keep the facts the decision uses
+  vars:
+    g: "{{ rb_guest_win.output[0] if rb_guest_os == 'windows' else (rb_guest_linux.stdout | from_json) }}"
+    disks: "{{ rb_vm_disks.guest_disk_info.values() | list }}"
+    disk: "{{ disks | selectattr('backing_uuid', 'defined') | selectattr('backing_uuid', 'truthy')
+              | selectattr('backing_uuid', 'regex', '(?i)^' ~ (g.serial | default('none'))[:8])
+              | list | first | default({}) }}"
+    ds: "{{ rb_datastores.datastores | selectattr('name', 'equalto', disk.backing_datastore | default('')) | first | default({}) }}"
+  ansible.builtin.set_fact:
+    rb_facts:
+      guest_os: "{{ rb_guest_os }}"
+      volume: "{{ rb_volume }}"
+      volume_size_gb: "{{ g.size_gb }}"
+      volume_used_pct: "{{ g.used_pct }}"
+      volume_blocked: "{{ g.blocked }}"
+      guest_serial: "{{ g.serial }}"
+      linux: "{{ {'disk': g.disk, 'partition': g.partition, 'source': g.source, 'lvm': g.lvm} if rb_guest_os == 'linux' else none }}"
+      disk_found: "{{ disk != {} and (disk.backing_uuid | lower | regex_replace('[^0-9a-f]', '')) == g.serial }}"
+      disk_label: "{{ disk.label | default(none) }}"
+      disk_backing: "{{ disk.backing_type | default(none) }}"
+      disk_controller_bus: "{{ disk.controller_bus_number | default(none) }}"
+      disk_unit: "{{ disk.unit_number | default(none) }}"
+      disk_controller_type: "{{ disk.controller_type | default(none) }}"
+      disk_size_gb: "{{ ((disk.capacity_in_bytes | default(0) | int) / 1073741824) | round(1) }}"
+      snapshots: "{{ rb_vm_snaps.guest_snapshots.snapshots | default([]) | length }}"
+      datastore: "{{ ds.name | default(none) }}"
+      datastore_free_gb: "{{ ((ds.freeSpace | default(0) | int) / 1073741824) | round(1) }}"
+      datastore_capacity_gb: "{{ ((ds.capacity | default(0) | int) / 1073741824) | round(1) }}"

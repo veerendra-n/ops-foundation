@@ -1,0 +1,20 @@
+# Every declared parameter is reset per case: the case value, else the meta default, else empty.
+- name: "Set parameters: {{ rb_case.name }}"
+  ansible.builtin.set_fact:
+    "{{ item.name }}": "{{ rb_case.params[item.name] if item.name in (rb_case.params | default({})) else item.default | default('') }}"
+  loop: "{{ rb_meta.params }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "Decide: {{ rb_case.name }}"
+  ansible.builtin.include_tasks: "{{ rb_abs }}/tasks/decide.yml"
+  vars:
+    rb_facts: "{{ rb_case.facts }}"
+
+- name: "Check: {{ rb_case.name }}"
+  ansible.builtin.assert:
+    that:
+      - rb_decision.action == rb_case.expect
+      - rb_case.reason_contains is not defined or rb_case.reason_contains in rb_decision.reason
+    fail_msg: "{{ rb_case.name }}: expected {{ rb_case.expect }}, got {{ rb_decision.action }} ({{ rb_decision.reason }})"
+    success_msg: "{{ rb_case.name }}: {{ rb_decision.action }} ({{ rb_decision.reason }})"

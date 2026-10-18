@@ -1,0 +1,16 @@
+- name: Unlock the account
+  ansible.windows.win_powershell:
+    script: |
+      param([string]$Username)
+      $ErrorActionPreference = 'Stop'
+      Import-Module ActiveDirectory
+      Unlock-ADAccount -Identity $Username
+      $Ansible.Changed = $true
+    parameters:
+      Username: "{{ rb_facts.username }}"
+
+- name: Record actions
+  ansible.builtin.set_fact:
+    rb_actions:
+      - action: unlock_ad_account
+        username: "{{ rb_facts.username }}"

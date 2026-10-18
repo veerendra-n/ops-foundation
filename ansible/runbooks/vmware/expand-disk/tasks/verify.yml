@@ -1,0 +1,25 @@
+- name: Read the guest volume again (Windows)
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', rb_dir ~ '/tasks/guest_volume.ps1') }}"
+    parameters:
+      Drive: "{{ rb_volume }}"
+  changed_when: false
+  register: rb_verify_win
+  when: rb_guest_os == 'windows'
+
+- name: Read the guest volume again (Linux)
+  ansible.builtin.script:
+    cmd: "{{ rb_dir }}/tasks/guest_volume.sh {{ rb_volume | quote }}"
+  changed_when: false
+  register: rb_verify_linux
+  when: rb_guest_os == 'linux'
+
+- name: Keep the after state
+  ansible.builtin.set_fact:
+    rb_after: "{{ rb_verify_win.output[0] if rb_guest_os == 'windows' else (rb_verify_linux.stdout | from_json) }}"
+
+- name: Check the volume grew
+  ansible.builtin.assert:
+    that:
+      - (rb_after.size_gb | float) >= (rb_facts.volume_size_gb | float) + (rb_increase_gb | int) * 0.9
+    fail_msg: "{{ rb_volume }} is {{ rb_after.size_gb }} GB after the grow, expected about {{ (rb_facts.volume_size_gb | float) + (rb_increase_gb | int) }} GB."

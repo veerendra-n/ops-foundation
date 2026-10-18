@@ -1,0 +1,8 @@
+# Intune queues the remediation for the device's next check-in; the result arrives later in
+# deviceHealthScripts run states, which the platform polls. Mark the run pending, not fixed.
+- name: Mark the fix as waiting on the device
+  ansible.builtin.set_fact:
+    rb_pending: true
+    rb_after:
+      queued_for: "{{ rb_facts.device_id }}"
+      check: "{{ graph_base }}/deviceManagement/deviceHealthScripts/{{ customer_teams_remediation_id }}/deviceRunStates"

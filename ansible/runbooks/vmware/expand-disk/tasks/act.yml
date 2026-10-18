@@ -1,0 +1,44 @@
+- name: Grow the virtual disk
+  community.vmware.vmware_guest_disk:
+    uuid: "{{ vm_uuid }}"
+    disk:
+      - controller_type: "{{ rb_facts.disk_controller_type }}"
+        controller_number: "{{ rb_facts.disk_controller_bus | int }}"
+        unit_number: "{{ rb_facts.disk_unit | int }}"
+        datastore: "{{ rb_facts.datastore }}"
+        size_gb: "{{ ((rb_facts.disk_size_gb | float) + (rb_increase_gb | int)) | round | int }}"
+        state: present
+  delegate_to: localhost
+
+- name: Extend the Windows partition
+  ansible.windows.win_powershell:
+    script: |
+      param([string]$Drive)
+      $ErrorActionPreference = 'Stop'
+      $letter = $Drive.TrimEnd(':', '\')
+      Update-HostStorageCache
+      $max = (Get-PartitionSupportedSize -DriveLetter $letter).SizeMax
+      Resize-Partition -DriveLetter $letter -Size $max
+      $Ansible.Changed = $true
+    parameters:
+      Drive: "{{ rb_volume }}"
+  when: rb_guest_os == 'windows'
+
+- name: Extend the Linux partition and file system
+  ansible.builtin.script:
+    cmd: >-
+      {{ rb_dir }}/tasks/guest_extend.sh {{ rb_facts.linux.disk | quote }} {{ rb_facts.linux.partition | quote }}
+      {{ rb_facts.linux.source | quote }} {{ rb_facts.linux.lvm | string | lower }}
+  become: true
+  changed_when: true
+  when: rb_guest_os == 'linux'
+
+- name: Record actions
+  ansible.builtin.set_fact:
+    rb_actions:
+      - action: grow_vmdk
+        disk: "{{ rb_facts.disk_label }}"
+        from_gb: "{{ rb_facts.disk_size_gb }}"
+        to_gb: "{{ ((rb_facts.disk_size_gb | float) + (rb_increase_gb | int)) | round | int }}"
+      - action: extend_guest_volume
+        volume: "{{ rb_volume }}"

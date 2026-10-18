@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  OTELCOL_VERSION: "0.160.0"
+  TOFU_VERSION: "1.11.2"
+  GITLEAKS_VERSION: "8.28.0"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
+      - name: yamllint
+        run: yamllint -s .
+      - name: ansible-lint
+        run: ansible-lint
+      - name: ruff
+        run: |
+          ruff check tools integrations tests
+          ruff format --check tools integrations tests
+      - name: shellcheck
+        run: find . -name '*.sh' -not -path './.venv/*' -print0 | xargs -0 shellcheck
+      - name: Secret scan (gitleaks)
+        run: |
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks git --redact --no-banner .
+
+  runbooks:
+    name: Runbook tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
+      - name: Syntax check every playbook
+        run: |
+          for pb in ansible/runbooks/*/*/runbook.yml ansible/playbooks/*.yml; do
+            ansible-playbook --syntax-check -i localhost, -e rb_targets=localhost "$pb"
+          done
+      - name: Contract, guard and decision tests
+        run: python -m pytest -v
+      - name: Build the runbook catalog
+        run: python tools/build_catalog.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runbook-catalog
+          path: build/catalog.json
+
+  powershell:
+    name: PowerShell analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            Invoke-ScriptAnalyzer -Path $_.FullName -Severity Error -ExcludeRule PSAvoidUsingWriteHost
+          }
+          $results | Format-Table -AutoSize
+          if ($results) { exit 1 }
+
+  otel:
+    name: OpenTelemetry configs
+    runs-on: ubuntu-latest
+    env:
+      TENANT_ID: ci
+      SITE_ID: hq
+      EDGE_NODE: edge-ci-hq
+      OO_ENDPOINT: https://observe.ci.example
+      OO_ORG: ci
+      OO_AUTH: ci
+      VCENTER_HOST: vcenter.ci.example
+      VCENTER_USER: ci
+      VCENTER_PASSWORD: ci
+      SNMP_PROBE_TARGET: 192.0.2.1
+      SNMP_USER: ci
+      SNMP_AUTH_PASSWORD: ci-auth-pass
+      SNMP_PRIV_PASSWORD: ci-priv-pass
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate the edge collector config
+        run: |
+          curl -sSL "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/otelcol-contrib_${OTELCOL_VERSION}_linux_amd64.tar.gz" | tar -xz otelcol-contrib
+          sudo ./otelcol-contrib validate --config=edge/otel/edge-collector.yaml
+
+  otel-windows:
+    name: OpenTelemetry Windows agent config
+    runs-on: windows-latest
+    env:
+      EDGE_OTLP_ENDPOINT: edge.ci.example:4317
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate the Windows agent config
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v$env:OTELCOL_VERSION/otelcol-contrib_$($env:OTELCOL_VERSION)_windows_amd64.tar.gz" -OutFile otel.tgz
+          tar -xzf otel.tgz otelcol-contrib.exe
+          New-Item -ItemType Directory -Force C:\ProgramData\ops-edge | Out-Null
+          Set-Content C:\ProgramData\ops-edge\edge-ca.pem ''
+          .\otelcol-contrib.exe validate --config=edge/otel/windows-server-agent.yaml
+
+  tofu:
+    name: OpenTofu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - name: Format
+        run: tofu fmt -recursive -check tofu customers
+      - name: Validate modules
+        run: |
+          for m in tofu/modules/*/; do
+            echo "::group::$m"
+            tofu -chdir="$m" init -backend=false -input=false
+            tofu -chdir="$m" validate
+            echo "::endgroup::"
+          done
+      - name: Render edge node user data
+        run: tools/test_userdata.sh
