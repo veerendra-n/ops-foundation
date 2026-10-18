@@ -41,7 +41,7 @@ jobs:
           ruff check tools integrations tests
           ruff format --check tools integrations tests
       - name: shellcheck
-        run: find . -name '*.sh' -not -path './.venv/*' -print0 | xargs -0 shellcheck
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck
       - name: Secret scan (gitleaks)
         run: |
           curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
