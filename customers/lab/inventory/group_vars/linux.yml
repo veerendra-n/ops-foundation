@@ -1,0 +1,3 @@
+ansible_connection: ssh
+ansible_user: svc-ops-foundation
+# Key is fetched by Semaphore from OpenBao into the run's key store; never committed.

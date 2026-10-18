@@ -1,0 +1,30 @@
+- name: Stopped spooler
+  facts: { service_state: Stopped, start_mode: Auto, is_domain_controller: false, crashes_last_hour: 1, jobs_total: 0, jobs_stuck: 0 }
+  expect: start
+
+- name: Stuck jobs, clearing allowed
+  facts: { service_state: Running, start_mode: Auto, is_domain_controller: false, crashes_last_hour: 0, jobs_total: 9, jobs_stuck: 3 }
+  expect: restart_and_clear
+
+- name: Stuck jobs, keep them
+  params: { rb_clear_stuck: false }
+  facts: { service_state: Running, start_mode: Auto, is_domain_controller: false, crashes_last_hour: 0, jobs_total: 9, jobs_stuck: 3 }
+  expect: restart
+
+- name: Disabled by hardening policy
+  facts: { service_state: Stopped, start_mode: Disabled, is_domain_controller: false, crashes_last_hour: 0, jobs_total: 0, jobs_stuck: 0 }
+  expect: escalate
+  reason_contains: disabled on purpose
+
+- name: Domain controller
+  facts: { service_state: Stopped, start_mode: Auto, is_domain_controller: true, crashes_last_hour: 0, jobs_total: 0, jobs_stuck: 0 }
+  expect: escalate
+
+- name: Crash loop
+  facts: { service_state: Stopped, start_mode: Auto, is_domain_controller: false, crashes_last_hour: 4, jobs_total: 0, jobs_stuck: 0 }
+  expect: escalate
+  reason_contains: faulty driver
+
+- name: Healthy
+  facts: { service_state: Running, start_mode: Auto, is_domain_controller: false, crashes_last_hour: 0, jobs_total: 2, jobs_stuck: 0 }
+  expect: none

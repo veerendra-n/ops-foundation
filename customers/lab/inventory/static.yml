@@ -1,0 +1,21 @@
+# Fictitious estate used by CI and demos. Matches the prototype's scenarios.
+all:
+  children:
+    windows:
+      children:
+        sql_servers:
+          hosts:
+            lab-sql01: { ansible_host: 10.20.0.11 }
+        print_servers:
+          hosts:
+            lab-prt01: { ansible_host: 10.20.0.21 }
+        ad_pdc:
+          hosts:
+            lab-dc01: { ansible_host: 10.20.0.5 }
+        vmware_guests:
+          hosts:
+            lab-app01: { ansible_host: 10.20.0.31, vm_uuid: 4211b1a2-0000-0000-0000-00000000a001 }
+    graph_api:
+      hosts:
+        graph-lab:
+          ansible_connection: local

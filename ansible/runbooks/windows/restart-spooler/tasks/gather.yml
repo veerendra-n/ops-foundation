@@ -1,0 +1,11 @@
+- name: Read spooler and queue state
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', rb_dir ~ '/tasks/gather.ps1') }}"
+    parameters:
+      StuckMinutes: "{{ rb_stuck_minutes | int }}"
+  changed_when: false
+  register: rb_gather
+
+- name: Keep the facts the decision uses
+  ansible.builtin.set_fact:
+    rb_facts: "{{ rb_gather.output[0] }}"

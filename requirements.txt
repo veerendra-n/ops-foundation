@@ -1,0 +1,9 @@
+# Tooling for CI and local runs. Bump deliberately; runbooks are tested against these.
+ansible-core==2.20.10
+ansible-lint==26.10.1
+yamllint==1.38.0
+jsonschema==4.26.0
+pyyaml==6.0.3
+requests==2.34.2
+pytest==9.1.1
+ruff==0.17.1

@@ -1,0 +1,53 @@
+# Each case feeds fixture facts (as the gather step would return them) into tasks/decide.yml.
+- name: Waiting for log backup, oversized, agent job set
+  params: { rb_backup_mode: agent_job, rb_agent_job: "LogBackup - ERP", rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: LOG_BACKUP, hadr_role: NONE, log_size_mb: 81920, log_used_pct: 97.5, backup_target_free_mb: null }
+  expect: backup_and_shrink
+
+- name: Waiting for log backup, already small
+  params: { rb_backup_mode: agent_job, rb_agent_job: "LogBackup - ERP", rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: LOG_BACKUP, hadr_role: NONE, log_size_mb: 4096, log_used_pct: 95, backup_target_free_mb: null }
+  expect: backup_only
+
+- name: Shrink disabled by parameter
+  params: { rb_backup_mode: agent_job, rb_agent_job: "LogBackup - ERP", rb_shrink: false, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: LOG_BACKUP, hadr_role: NONE, log_size_mb: 81920, log_used_pct: 97.5, backup_target_free_mb: null }
+  expect: backup_only
+
+- name: No agent job configured
+  params: { rb_backup_mode: agent_job, rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: LOG_BACKUP, hadr_role: NONE, log_size_mb: 81920, log_used_pct: 97.5, backup_target_free_mb: null }
+  expect: escalate
+  reason_contains: no SQL Agent job
+
+- name: Native mode with enough space
+  params: { rb_backup_mode: native, rb_backup_path: 'E:\SQLBackup\Log', rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: LOG_BACKUP, hadr_role: NONE, log_size_mb: 20480, log_used_pct: 90, backup_target_free_mb: 200000 }
+  expect: backup_and_shrink
+
+- name: Native mode, backup target nearly full
+  params: { rb_backup_mode: native, rb_backup_path: 'E:\SQLBackup\Log', rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: LOG_BACKUP, hadr_role: NONE, log_size_mb: 81920, log_used_pct: 97.5, backup_target_free_mb: 30000 }
+  expect: escalate
+  reason_contains: Not enough space
+
+- name: Open transaction holds the log
+  params: { rb_backup_mode: agent_job, rb_agent_job: "LogBackup - ERP", rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: ACTIVE_TRANSACTION, hadr_role: NONE, log_size_mb: 81920, log_used_pct: 99, backup_target_free_mb: null }
+  expect: escalate
+  reason_contains: ACTIVE_TRANSACTION
+
+- name: Availability group secondary
+  params: { rb_backup_mode: agent_job, rb_agent_job: "LogBackup - ERP", rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: LOG_BACKUP, hadr_role: SECONDARY, log_size_mb: 81920, log_used_pct: 97.5, backup_target_free_mb: null }
+  expect: escalate
+
+- name: Reusable but oversized log
+  params: { rb_backup_mode: agent_job, rb_agent_job: "LogBackup - ERP", rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: SIMPLE, log_reuse_wait: NOTHING, hadr_role: NONE, log_size_mb: 40960, log_used_pct: 4, backup_target_free_mb: null }
+  expect: shrink_only
+
+- name: Healthy log
+  params: { rb_backup_mode: agent_job, rb_agent_job: "LogBackup - ERP", rb_shrink: true, rb_shrink_target_mb: 4096 }
+  facts: { recovery_model: FULL, log_reuse_wait: NOTHING, hadr_role: NONE, log_size_mb: 2048, log_used_pct: 12, backup_target_free_mb: null }
+  expect: none

@@ -1,0 +1,29 @@
+- name: Get a Graph token
+  ansible.builtin.include_role:
+    name: graph_token
+
+- name: Find the device in Intune
+  ansible.builtin.uri:
+    url: "{{ graph_base }}/deviceManagement/managedDevices?$filter={{ rb_filter | urlencode }}&$select=id,deviceName,operatingSystem,lastSyncDateTime,userPrincipalName,complianceState,managementState"
+    headers: "{{ graph_headers }}"
+    return_content: true
+  vars:
+    rb_filter: "deviceName eq '{{ rb_device_name | replace(\"'\", \"''\") }}'"
+  register: rb_devices
+  delegate_to: localhost
+
+- name: Keep the facts the decision uses
+  vars:
+    d: "{{ rb_devices.json.value | first | default({}) }}"
+  ansible.builtin.set_fact:
+    rb_facts:
+      matches: "{{ rb_devices.json.value | length }}"
+      device_id: "{{ d.id | default(none) }}"
+      device_name: "{{ d.deviceName | default(rb_device_name) }}"
+      os: "{{ d.operatingSystem | default(none) }}"
+      user: "{{ d.userPrincipalName | default(none) }}"
+      compliance: "{{ d.complianceState | default(none) }}"
+      management_state: "{{ d.managementState | default(none) }}"
+      last_sync_hours: >-
+        {{ (((now(utc=true) - (d.lastSyncDateTime | regex_replace('\.\d+Z$', 'Z') | to_datetime('%Y-%m-%dT%H:%M:%SZ'))).total_seconds()) / 3600)
+           | round(1) if d.lastSyncDateTime is defined else none }}

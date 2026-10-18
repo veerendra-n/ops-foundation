@@ -1,0 +1,7 @@
+# Hosts NetBox does not hold: the API pseudo-host for Graph runbooks and any stragglers.
+all:
+  children:
+    graph_api:
+      hosts:
+        graph-TENANT_ID:
+          ansible_connection: local

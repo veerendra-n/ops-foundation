@@ -1,0 +1,38 @@
+id: endpoint/clear-teams-cache
+version: 1.0.0
+title: Clear the Microsoft Teams cache on a user's laptop
+domain: endpoint
+summary: >-
+  For "Teams won't load, sign in or show messages" calls. Finds the user's Windows laptop in Intune and
+  runs the Teams cache remediation on demand. The remediation closes Teams, clears the new and classic
+  Teams caches for the signed-in user and starts Teams again. Offline, stale or non-Windows devices are escalated.
+executor: intune
+targets:
+  platform: api
+  group: graph_api
+  delegate: localhost
+risk: low
+approval: not_required
+max_targets: 1
+params:
+  - name: rb_device_name
+    type: string
+    required: true
+    description: Intune device name of the user's laptop, e.g. LT-04231.
+  - name: rb_max_sync_age_hours
+    type: integer
+    required: false
+    default: 24
+    description: Escalate when the device has not checked in to Intune for longer than this.
+outcomes: [escalate, run_remediation]
+rollback: >-
+  None needed. Teams rebuilds its cache on next start; the user may need to sign in again.
+triggers:
+  - service-desk-teams-not-loading
+secrets:
+  - Entra app client secret for the customer's tenant, DeviceManagementManagedDevices.PrivilegedOperations.All and DeviceManagementManagedDevices.Read.All (OpenBao, per tenant)
+notes: >-
+  The remediation package (scripts/detect.ps1, scripts/remediate.ps1) is uploaded to each customer's Intune
+  once at onboarding, set to run as the logged-on user, and its id stored as customer_teams_remediation_id.
+  For laptops managed by Level instead of Intune, the same remediate.ps1 is imported into Level as a script;
+  triggering it from here waits on confirming Level's API (see docs/integrations.md).

@@ -1,0 +1,31 @@
+# Pure decision step: reads rb_facts and parameters only. Tested offline by tests/cases.yml.
+- name: Decide whether the disk can be grown safely
+  vars:
+    f: "{{ rb_facts }}"
+    free_after: "{{ (f.datastore_free_gb | float) - (rb_increase_gb | float) }}"
+    reserve: "{{ (f.datastore_capacity_gb | float) * (rb_datastore_reserve_pct | float) / 100 }}"
+  ansible.builtin.set_fact:
+    rb_verdict: >-
+      {%- if not (f.disk_found | bool) -%}
+        escalate::Could not map {{ f.volume }} to a virtual disk by serial; check disk.EnableUUID on the VM.
+      {%- elif f.disk_backing is not none and 'RawDisk' in f.disk_backing -%}
+        escalate::{{ f.disk_label }} is a raw device mapping; grow the LUN on the array instead.
+      {%- elif (f.snapshots | int) > 0 -%}
+        escalate::VM has {{ f.snapshots }} snapshot(s), often left by a backup job; disks cannot grow until they are removed.
+      {%- elif f.volume_blocked | bool -%}
+        escalate::Another partition sits after {{ f.volume }} on the disk, or it spans several disks; it cannot be extended in place.
+      {%- elif (rb_increase_gb | int) <= 0 -%}
+        escalate::Increase must be a positive number of GB.
+      {%- elif (rb_increase_gb | int) > (rb_max_increase_gb | int) -%}
+        escalate::{{ rb_increase_gb }} GB is above the {{ rb_max_increase_gb }} GB limit; raise a change for it.
+      {%- elif (free_after | float) < (reserve | float) -%}
+        escalate::Datastore {{ f.datastore }} would drop to {{ (free_after | float) | round | int }} GB free, below the {{ rb_datastore_reserve_pct }}% reserve.
+      {%- else -%}
+        expand::Grow {{ f.disk_label }} from {{ f.disk_size_gb }} GB by {{ rb_increase_gb }} GB; {{ f.datastore }} keeps {{ (free_after | float) | round | int }} GB free.
+      {%- endif -%}
+
+- name: Record the decision
+  ansible.builtin.set_fact:
+    rb_decision:
+      action: "{{ (rb_verdict | trim).split('::', 1)[0] }}"
+      reason: "{{ (rb_verdict | trim).split('::', 1)[1] }}"

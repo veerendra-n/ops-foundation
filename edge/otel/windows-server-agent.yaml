@@ -1,0 +1,59 @@
+# OpenTelemetry Collector on a Windows server, only where API polling is not enough
+# (SQL Server, IIS, event logs, per-service health). Sends OTLP to the site's edge node.
+# Domain controllers get a variant that also reads Security event 4740 (account lockouts); next slice.
+receivers:
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu: {}
+      memory: {}
+      paging: {}
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      disk: {}
+      network: {}
+  windowsperfcounters/system:
+    collection_interval: 60s
+    metrics:
+      system.processor_queue_length:
+        gauge: {}
+    perfcounters:
+      - object: System
+        counters:
+          - name: Processor Queue Length
+            metric: system.processor_queue_length
+  windowseventlog/system:
+    channel: System
+  windowseventlog/application:
+    channel: Application
+  sqlserver:
+    collection_interval: 60s
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 200
+  resourcedetection:
+    detectors: [system]
+    system:
+      hostname_sources: [os]
+  batch: {}
+
+exporters:
+  otlp/edge:
+    endpoint: ${env:EDGE_OTLP_ENDPOINT}
+    tls:
+      ca_file: C:\ProgramData\ops-edge\edge-ca.pem
+
+service:
+  pipelines:
+    metrics:
+      receivers: [hostmetrics, windowsperfcounters/system, sqlserver]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [otlp/edge]
+    logs:
+      receivers: [windowseventlog/system, windowseventlog/application]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [otlp/edge]

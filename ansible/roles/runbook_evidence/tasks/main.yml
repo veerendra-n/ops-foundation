@@ -1,0 +1,23 @@
+# Emits one machine-readable line per target. The platform and the PSA note are built from it.
+# Contract: a single line starting with "RUNBOOK_EVIDENCE " followed by JSON (docs/runbook-contract.md).
+- name: Emit evidence
+  ansible.builtin.debug:
+    msg: >-
+      RUNBOOK_EVIDENCE {{ {
+        'schema': 'ops-foundation/evidence/v1',
+        'runbook': rb_meta.id,
+        'runbook_version': rb_meta.version,
+        'run_id': rb_run_id_effective,
+        'tenant': tenant_id,
+        'target': inventory_hostname,
+        'dry_run': rb_dry_run_effective,
+        'approval_ref': rb_approval_ref | default(none),
+        'started_at': rb_started_at,
+        'finished_at': now(utc=true).isoformat(),
+        'before': rb_facts | default({}),
+        'decision': rb_decision | default({}),
+        'actions': rb_actions | default([]),
+        'after': rb_after | default({}),
+        'outcome': rb_outcome | default('unknown'),
+        'error': rb_error | default(none)
+      } | to_json }}

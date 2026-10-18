@@ -1,0 +1,24 @@
+# Dynamic inventory: NetBox is the source of truth, one NetBox tenant per customer.
+# NETBOX_API and NETBOX_TOKEN come from the Semaphore environment for this customer's project.
+plugin: netbox.netbox.nb_inventory
+validate_certs: true
+config_context: false
+interfaces: false
+compose:
+  vm_uuid: custom_fields.vm_uuid
+query_filters:
+  - tenant: TENANT_ID
+  - status: active
+device_query_filters:
+  - has_primary_ip: true
+vm_query_filters:
+  - has_primary_ip: true
+group_by:
+  - platforms
+  - device_roles
+  - tags
+  - sites
+keyed_groups:
+  # NetBox tag "rb-sql-servers" puts a host in group sql_servers, and so on.
+  - key: tags | map(attribute='slug') | select('match', '^rb-') | map('regex_replace', '^rb-', '') | map('replace', '-', '_') | list
+    separator: ""

@@ -1,0 +1,44 @@
+{{- /* Oxidized config, rendered by the OpenBao agent to /opt/ops-edge/oxidized/config.
+       Nightly network config backups, diffed in Git. Devices come from NetBox through the
+       "oxidized" export template (netbox/bootstrap.yml), limited to this tenant and site. */ -}}
+{{- with secret (printf "%s/data/edge/%s" (env "SECRETS_PATH") (env "SITE_ID")) }}
+---
+interval: 86400
+threads: 10
+timeout: 30
+retries: 2
+rest: 127.0.0.1:8888
+username: {{ .Data.data.net_user }}
+password: {{ .Data.data.net_password }}
+model: ios
+vars:
+  enable: {{ .Data.data.net_enable }}
+input:
+  default: ssh
+  ssh:
+    secure: true
+output:
+  default: git
+  git:
+    user: oxidized
+    email: oxidized@{{ env "EDGE_NODE" }}
+    repo: /home/oxidized/data/configs.git
+source:
+  default: http
+  http:
+    url: {{ .Data.data.netbox_api }}/api/dcim/devices/?export=oxidized&tenant={{ env "TENANT_ID" }}&site={{ env "SITE_ID" }}&tag=oxidized&status=active
+    secure: true
+    map:
+      name: name
+      ip: ip
+      model: model
+    headers:
+      Authorization: Token {{ .Data.data.netbox_token }}
+model_map:
+  cisco-ios: ios
+  cisco-ios-xe: iosxe
+  cisco-nx-os: nxos
+  arista-eos: eos
+  aruba-aos-cx: aoscx
+  aruba-aos: aosw
+{{- end }}

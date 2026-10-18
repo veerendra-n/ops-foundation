@@ -1,0 +1,12 @@
+tenant_id: lab
+secrets_path: secret/customers/lab
+
+# Entra / Graph (per customer app registration; secret in OpenBao)
+customer_entra_tenant_id: 00000000-0000-0000-0000-000000000000
+customer_graph_client_id: 00000000-0000-0000-0000-000000000000
+customer_teams_remediation_id: 00000000-0000-0000-0000-000000000000
+
+# vCenter
+vcenter_hostname: vcenter.lab.example
+vcenter_username: svc-ops-foundation@vsphere.local
+vcenter_datacenter: DC1

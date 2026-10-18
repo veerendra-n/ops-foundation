@@ -1,0 +1,20 @@
+- name: Get a Microsoft Graph token for this customer
+  ansible.builtin.uri:
+    url: "https://login.microsoftonline.com/{{ graph_tenant_id }}/oauth2/v2.0/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      grant_type: client_credentials
+      client_id: "{{ graph_client_id }}"
+      client_secret: "{{ graph_client_secret }}"
+      scope: https://graph.microsoft.com/.default
+    return_content: true
+  register: graph_token_response
+  no_log: true
+  delegate_to: localhost
+
+- name: Keep the token
+  ansible.builtin.set_fact:
+    graph_headers:
+      Authorization: "Bearer {{ graph_token_response.json.access_token }}"
+  no_log: true

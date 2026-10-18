@@ -1,0 +1,18 @@
+- name: Read spooler state again
+  ansible.windows.win_powershell:
+    script: "{{ lookup('ansible.builtin.file', rb_dir ~ '/tasks/gather.ps1') }}"
+    parameters:
+      StuckMinutes: "{{ rb_stuck_minutes | int }}"
+  changed_when: false
+  register: rb_verify
+
+- name: Keep the after state
+  ansible.builtin.set_fact:
+    rb_after: "{{ rb_verify.output[0] }}"
+
+- name: Check the spooler is running and the stuck jobs are gone
+  ansible.builtin.assert:
+    that:
+      - rb_after.service_state == 'Running'
+      - rb_decision.action != 'restart_and_clear' or (rb_after.jobs_stuck | int) == 0
+    fail_msg: "Spooler is {{ rb_after.service_state }} with {{ rb_after.jobs_stuck }} stuck job(s) after the restart."

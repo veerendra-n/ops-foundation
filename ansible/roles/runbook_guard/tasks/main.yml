@@ -1,0 +1,55 @@
+# Safety checks every runbook runs first. Fails closed: anything missing stops the run.
+- name: Load runbook metadata
+  ansible.builtin.include_vars:
+    file: "{{ rb_dir }}/meta.yml"
+    name: rb_meta
+
+- name: Set run defaults
+  ansible.builtin.set_fact:
+    rb_dry_run_effective: "{{ rb_dry_run | default(true) | bool }}"
+    rb_run_id_effective: "{{ rb_run_id | default('local-' ~ now(utc=true).strftime('%Y%m%dT%H%M%SZ')) }}"
+    rb_started_at: "{{ now(utc=true).isoformat() }}"
+
+- name: Check the run is for the customer this inventory belongs to
+  ansible.builtin.assert:
+    that:
+      - rb_tenant is defined
+      - tenant_id is defined
+      - rb_tenant == tenant_id
+    fail_msg: >-
+      Tenant mismatch: run asked for '{{ rb_tenant | default('unset') }}' but {{ inventory_hostname }}
+      belongs to '{{ tenant_id | default('unset') }}'. Refusing to run across customers.
+    quiet: true
+
+- name: Check the blast radius
+  ansible.builtin.assert:
+    that:
+      - ansible_play_hosts_all | length <= (rb_meta.max_targets | int)
+    fail_msg: >-
+      {{ ansible_play_hosts_all | length }} targets selected; {{ rb_meta.id }} allows at most {{ rb_meta.max_targets }}.
+      Narrow the limit or split the run.
+    quiet: true
+  run_once: true
+
+- name: Check approval for a live run
+  ansible.builtin.assert:
+    that:
+      - rb_approval_ref is defined
+      - rb_approval_ref is match('^[A-Za-z0-9][A-Za-z0-9_./:-]{2,63}$')
+    fail_msg: >-
+      {{ rb_meta.id }} is risk '{{ rb_meta.risk }}' and needs an approval reference (ticket or approval id)
+      for a live run. Set rb_approval_ref, or run with rb_dry_run=true.
+    quiet: true
+  when:
+    - not rb_dry_run_effective
+    - rb_meta.approval == 'required'
+
+- name: Check required parameters
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.vars', item.name, default='') | string | length > 0
+    fail_msg: "Missing required parameter {{ item.name }}: {{ item.description }}"
+    quiet: true
+  loop: "{{ rb_meta.params | selectattr('required') | list }}"
+  loop_control:
+    label: "{{ item.name }}"

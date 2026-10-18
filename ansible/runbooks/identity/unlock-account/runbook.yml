@@ -1,0 +1,8 @@
+- name: Unlock a locked Active Directory account
+  hosts: "{{ rb_targets }}"
+  gather_facts: false
+  vars:
+    rb_dir: "{{ playbook_dir }}"
+    rb_max_lockouts: 5
+  roles:
+    - runbook_run

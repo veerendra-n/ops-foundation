@@ -1,0 +1,39 @@
+id: windows/restart-spooler
+version: 1.0.0
+title: Restart a stuck Windows print spooler
+domain: server
+summary: >-
+  Checks the print spooler and its queues on a Windows server. Restarts the spooler when it has stopped or
+  jobs are stuck, and removes only the stuck jobs' spool files. Leaves deliberately disabled spoolers and
+  domain controllers alone, and escalates a spooler that keeps crashing (usually a bad driver).
+executor: ansible-winrm
+targets:
+  platform: windows
+  group: print_servers
+risk: low
+approval: not_required
+max_targets: 5
+params:
+  - name: rb_stuck_minutes
+    type: integer
+    required: false
+    default: 15
+    description: A job counts as stuck when it is in error or has not moved for this many minutes.
+  - name: rb_clear_stuck
+    type: boolean
+    required: false
+    default: true
+    description: Remove the spool files of stuck jobs while the spooler is stopped.
+  - name: rb_max_crashes
+    type: integer
+    required: false
+    default: 3
+    description: Spooler crashes in the last hour above which we escalate instead of restarting.
+outcomes: [none, escalate, start, restart, restart_and_clear]
+rollback: >-
+  Removed jobs cannot be restored; users resend them. The restart itself needs no rollback.
+triggers:
+  - print-spooler-stopped
+  - print-queue-stuck
+secrets:
+  - WinRM credential for the customer's servers (OpenBao, per tenant)

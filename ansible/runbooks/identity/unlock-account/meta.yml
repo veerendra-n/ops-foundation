@@ -1,0 +1,37 @@
+id: identity/unlock-account
+version: 1.0.0
+title: Unlock a locked Active Directory account
+domain: identity
+summary: >-
+  Checks why an on-premises AD account is locked and unlocks it when it is safe. Runs on the PDC emulator,
+  reads the lockout events for the last 24 hours and reports which computers caused them. Disabled,
+  privileged and repeatedly locked accounts are escalated instead of unlocked.
+executor: ansible-winrm
+targets:
+  platform: windows
+  group: ad_pdc
+risk: low
+approval: required
+max_targets: 1
+params:
+  - name: rb_username
+    type: string
+    required: true
+    description: sAMAccountName of the user, e.g. anna.berg.
+  - name: rb_max_lockouts
+    type: integer
+    required: false
+    default: 5
+    description: Lockouts in 24 hours at or above which we escalate (stale credentials or an attack).
+outcomes: [none, escalate, unlock]
+rollback: >-
+  Lock or disable the account again in AD if the unlock was requested by someone who was not the user.
+triggers:
+  - service-desk-account-locked
+  - ad-account-locked-out
+secrets:
+  - WinRM credential with the delegated "unlock account" right only, not Domain Admin (OpenBao, per tenant)
+notes: >-
+  The approval reference is the ticket in which the service desk verified the caller's identity; that check
+  is what stops social engineering, so the guard refuses a live run without it. Cloud-only Entra accounts
+  are not covered: Entra smart lockout clears on its own and needs no unlock.

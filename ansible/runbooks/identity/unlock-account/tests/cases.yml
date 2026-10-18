@@ -1,0 +1,33 @@
+- name: Ordinary lockout
+  params: { rb_username: anna.berg }
+  facts: { found: true, username: anna.berg, enabled: true, locked: true, privileged: false, lockouts_24h: 1, lockout_sources: [{ computer: LT-04231, count: 1 }] }
+  expect: unlock
+  reason_contains: LT-04231
+
+- name: Repeated lockouts from an old phone
+  params: { rb_username: anna.berg }
+  facts: { found: true, username: anna.berg, enabled: true, locked: true, privileged: false, lockouts_24h: 9, lockout_sources: [{ computer: EXCH01, count: 8 }, { computer: LT-04231, count: 1 }] }
+  expect: escalate
+  reason_contains: EXCH01
+
+- name: Disabled account
+  params: { rb_username: leaver.one }
+  facts: { found: true, username: leaver.one, enabled: false, locked: true, privileged: false, lockouts_24h: 1, lockout_sources: [] }
+  expect: escalate
+  reason_contains: disabled
+
+- name: Domain admin
+  params: { rb_username: adm.ops }
+  facts: { found: true, username: adm.ops, enabled: true, locked: true, privileged: true, lockouts_24h: 1, lockout_sources: [] }
+  expect: escalate
+  reason_contains: privileged
+
+- name: Not locked
+  params: { rb_username: anna.berg }
+  facts: { found: true, username: anna.berg, enabled: true, locked: false, privileged: false, lockouts_24h: 0, lockout_sources: [] }
+  expect: none
+
+- name: Unknown user
+  params: { rb_username: nobody }
+  facts: { found: false, username: nobody }
+  expect: escalate

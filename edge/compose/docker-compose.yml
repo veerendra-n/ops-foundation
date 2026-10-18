@@ -1,0 +1,71 @@
+# Deployed to /opt/ops-edge on the edge node (cloud-init first, then ansible/playbooks/edge-node.yml).
+# Per-site edge node: one small Linux VM per customer site (2 vCPU, 4 GB RAM, 40 GB disk).
+# Outbound only: OpenObserve (telemetry), Semaphore (runner), OpenBao (secrets), Git (config).
+# Optional profiles: "hardware" adds a Zabbix proxy for controllers that only Zabbix templates cover.
+name: ops-edge
+
+x-common: &common
+  restart: unless-stopped
+  env_file: [/etc/ops-edge/site.env, /etc/ops-edge/edge.env]
+  logging:
+    driver: json-file
+    options: { max-size: 20m, max-file: "3" }
+
+services:
+  openbao-agent:
+    <<: *common
+    image: openbao/openbao:${OPENBAO_VERSION}
+    command: ["agent", "-config=/etc/openbao/agent.hcl"]
+    env_file: [/etc/ops-edge/site.env]
+    volumes:
+      - /opt/ops-edge/openbao-agent.hcl:/etc/openbao/agent.hcl:ro
+      - /etc/ops-edge:/etc/ops-edge
+      - /opt/ops-edge/oxidized:/opt/ops-edge/oxidized
+    cap_add: [IPC_LOCK]
+
+  otel-collector:
+    <<: *common
+    image: otel/opentelemetry-collector-contrib:${OTELCOL_VERSION}
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - /opt/ops-edge/otel/edge-collector.yaml:/etc/otelcol/config.yaml:ro
+      - otel-queue:/var/lib/otelcol/queue
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "514:5514/udp"
+    depends_on: [openbao-agent]
+
+  semaphore-runner:
+    <<: *common
+    image: ghcr.io/veerendra-n/ops-foundation-runner:${RUNNER_VERSION}   # edge/runner/Dockerfile
+    environment:
+      SEMAPHORE_RUNNER_PRIVATE_KEY_FILE: /var/lib/semaphore/runner.key
+    volumes:
+      - runner-data:/var/lib/semaphore
+    depends_on: [openbao-agent]
+
+  oxidized:
+    <<: *common
+    image: oxidized/oxidized:${OXIDIZED_VERSION}
+    volumes:
+      - /opt/ops-edge/oxidized:/home/oxidized/.config/oxidized
+      - oxidized-data:/home/oxidized/data
+    depends_on: [openbao-agent]
+
+  zabbix-proxy:
+    <<: *common
+    profiles: [hardware]
+    image: zabbix/zabbix-proxy-sqlite3:${ZABBIX_VERSION}
+    environment:
+      ZBX_PROXYMODE: "0"          # 0 = active proxy: connects out to the Zabbix server
+      ZBX_HOSTNAME: ${EDGE_NODE}
+      ZBX_SERVER_HOST: ${ZABBIX_SERVER}
+    volumes:
+      - zabbix-data:/var/lib/zabbix
+
+volumes:
+  runner-data:
+  otel-queue:
+  oxidized-data:
+  zabbix-data:

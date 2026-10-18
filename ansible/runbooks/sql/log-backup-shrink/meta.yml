@@ -1,0 +1,62 @@
+id: sql/log-backup-shrink
+version: 1.0.0
+title: Free a full SQL Server transaction log
+domain: database
+summary: >-
+  Finds out why a database log cannot be reused. When it is only waiting for a log backup, takes one
+  (natively or by starting the customer's own SQL Agent job) and optionally shrinks the log file back
+  to a target size. Anything else holding the log (open transaction, replication, AG replica) is escalated.
+executor: ansible-winrm
+targets:
+  platform: windows
+  group: sql_servers
+risk: medium
+approval: required
+max_targets: 1
+params:
+  - name: rb_sql_instance
+    type: string
+    required: false
+    default: "."
+    description: SQL Server instance on the target, e.g. "." or ".\\SQL2019".
+  - name: rb_database
+    type: string
+    required: true
+    description: Database whose log is full.
+  - name: rb_backup_mode
+    type: enum
+    required: false
+    default: agent_job
+    choices: [agent_job, native]
+    description: >-
+      agent_job starts the customer's existing log backup job so the backup chain stays in their tool.
+      native writes a log backup to rb_backup_path; use only where we own SQL backups.
+  - name: rb_agent_job
+    type: string
+    required: false
+    description: SQL Agent job that backs up this database's log (agent_job mode).
+  - name: rb_backup_path
+    type: string
+    required: false
+    description: Folder or share for native log backups (native mode). Must be inside the customer's retention.
+  - name: rb_shrink
+    type: boolean
+    required: false
+    default: true
+    description: Shrink the log file after a successful backup.
+  - name: rb_shrink_target_mb
+    type: integer
+    required: false
+    default: 4096
+    description: Size to shrink the log file to, in MB. Never below the active log.
+outcomes: [none, escalate, backup_and_shrink, backup_only, shrink_only]
+rollback: >-
+  Nothing to roll back: a log backup and a shrink change no data. If the shrink was too aggressive the log
+  grows again on its own; raise rb_shrink_target_mb for the next run.
+triggers:
+  - sql-log-used-high
+secrets:
+  - WinRM credential for the customer's SQL servers (OpenBao, per tenant)
+notes: >-
+  Never run native mode against a database whose log backups belong to Veeam, Commvault or another tool:
+  a stray log backup breaks their restore chain. The gather step reports who took the last log backup.

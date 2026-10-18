@@ -1,0 +1,6 @@
+ansible_connection: winrm
+ansible_port: 5986
+ansible_winrm_transport: kerberos
+ansible_winrm_server_cert_validation: validate
+ansible_user: "{{ lookup('community.hashi_vault.hashi_vault', secrets_path ~ '/winrm:username') }}"
+ansible_password: "{{ lookup('community.hashi_vault.hashi_vault', secrets_path ~ '/winrm:password') }}"

@@ -1,0 +1,69 @@
+#cloud-config
+# Edge node bootstrap, rendered by tofu/modules/edge-node-userdata. Ubuntu 24.04 LTS.
+# Holds no long-lived secrets: the OpenBao secret_id is response-wrapped and expires within minutes.
+hostname: ${edge_node}
+package_update: true
+package_upgrade: true
+packages: [docker.io, docker-compose-v2, chrony, unattended-upgrades]
+users:
+  - name: opsadmin
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys: ${jsonencode(ssh_authorized_keys)}
+ssh_pwauth: false
+write_files:
+  - path: /etc/ops-edge/site.env
+    permissions: "0640"
+    content: |
+      TENANT_ID=${tenant_id}
+      SITE_ID=${site_id}
+      EDGE_NODE=${edge_node}
+      BAO_ADDR=${bao_addr}
+      OO_ENDPOINT=${oo_endpoint}
+      OO_ORG=${oo_org}
+      ZABBIX_SERVER=${zabbix_server}
+      SECRETS_PATH=${secrets_path}
+  - path: /etc/ops-edge/role_id
+    permissions: "0600"
+    content: ${role_id}
+  - path: /etc/ops-edge/secret_id
+    permissions: "0600"
+    content: ${wrapped_secret_id}
+  - path: /etc/ops-edge/edge.env.tpl
+    permissions: "0600"
+    content: |
+      {{ with secret "${secrets_path}/data/edge/${site_id}" }}
+      OO_AUTH={{ .Data.data.oo_auth }}
+      VCENTER_HOST={{ .Data.data.vcenter_host }}
+      VCENTER_USER={{ .Data.data.vcenter_user }}
+      VCENTER_PASSWORD={{ .Data.data.vcenter_password }}
+      SNMP_USER={{ .Data.data.snmp_user }}
+      SNMP_AUTH_PASSWORD={{ .Data.data.snmp_auth_password }}
+      SNMP_PRIV_PASSWORD={{ .Data.data.snmp_priv_password }}
+      SNMP_PROBE_TARGET={{ .Data.data.snmp_probe_target }}
+      SEMAPHORE_WEB_ROOT={{ .Data.data.semaphore_web_root }}
+      SEMAPHORE_RUNNER_REGISTRATION_TOKEN={{ .Data.data.semaphore_runner_token }}
+      {{ end }}
+  - path: /opt/ops-edge/docker-compose.yml
+    content: ${jsonencode(compose_file)}
+  - path: /opt/ops-edge/.env
+    content: ${jsonencode(versions_file)}
+  - path: /opt/ops-edge/openbao-agent.hcl
+    content: ${jsonencode(openbao_agent_file)}
+  - path: /opt/ops-edge/otel/edge-collector.yaml
+    content: ${jsonencode(otel_file)}
+  - path: /opt/ops-edge/oxidized/config.ctmpl
+    content: ${jsonencode(oxidized_file)}
+  - path: /etc/apt/apt.conf.d/52unattended-reboot
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "03:30";
+runcmd:
+  - [touch, /etc/ops-edge/edge.env]
+  - [systemctl, enable, --now, docker]
+  # Secrets first: the other services read edge.env when they are created.
+  - [docker, compose, --project-directory, /opt/ops-edge, up, -d, openbao-agent]
+  - [sh, -c, "for i in $(seq 1 60); do [ -s /etc/ops-edge/edge.env ] && break; sleep 5; done"]
+  - [docker, compose, --project-directory, /opt/ops-edge, up, -d]

@@ -1,0 +1,18 @@
+profile: production
+exclude_paths:
+  - .github/
+  - .venv/
+  - ansible/collections/
+  - customers/
+  - tofu/
+  - edge/
+  - observability/
+  - tools/
+  - tests/
+  - build/
+# Runbooks get their targets per run; this lets syntax-check resolve hosts.
+extra_vars:
+  rb_targets: localhost
+skip_list:
+  # rb_* is the runbook contract's shared namespace (docs/runbook-contract.md), set across roles on purpose.
+  - var-naming[no-role-prefix]

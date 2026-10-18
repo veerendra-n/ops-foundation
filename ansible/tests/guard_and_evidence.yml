@@ -1,0 +1,25 @@
+# Exercises the guard and evidence roles on localhost. tests/test_guard_evidence.py drives it with
+# different extra vars and checks which runs are refused.
+- name: Guard and evidence
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    tenant_id: lab
+    rb_dir: "{{ (playbook_dir ~ '/../runbooks/' ~ (rb_under_test | default('sql/log-backup-shrink'))) | realpath }}"
+    rb_database: ERP
+  tasks:
+    - name: Guard
+      ansible.builtin.include_role:
+        name: runbook_guard
+
+    - name: Fake a decision
+      ansible.builtin.set_fact:
+        rb_facts: { log_used_pct: 97.5, backup_path: "{{ rb_backup_path | default(none) }}" }
+        rb_decision: { action: backup_and_shrink, reason: "test" }
+        rb_actions: [{ action: log_backup, mode: agent_job, job: "LogBackup - ERP" }]
+        rb_outcome: "{{ 'dry_run' if rb_dry_run_effective else 'fixed' }}"
+
+    - name: Evidence
+      ansible.builtin.include_role:
+        name: runbook_evidence
