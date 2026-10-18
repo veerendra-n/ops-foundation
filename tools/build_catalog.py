@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write build/catalog.json: every runbook's metadata plus its playbook path.
+"""Write build/catalog.json: every runbook's metadata plus its playbook path, and every alert spec.
 
 The estate-ops-platform reads this to know which runbooks exist, what they need and how risky
 they are, then runs them through Semaphore. Runbooks themselves never leave this repo.
@@ -23,6 +23,9 @@ def main() -> int:
         meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
         meta["playbook"] = (meta_path.parent / "runbook.yml").relative_to(ROOT).as_posix()
         entries.append(meta)
+    alerts = [
+        yaml.safe_load(p.read_text(encoding="utf-8")) for p in sorted((ROOT / "observability/alerts").glob("*.yml"))
+    ]
     try:
         commit = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
@@ -33,11 +36,13 @@ def main() -> int:
     out.parent.mkdir(exist_ok=True)
     out.write_text(
         json.dumps(
-            {"schema": "ops-foundation/catalog/v1", "commit": commit, "runbooks": entries}, indent=2, default=str
+            {"schema": "ops-foundation/catalog/v1", "commit": commit, "runbooks": entries, "alerts": alerts},
+            indent=2,
+            default=str,
         )
         + "\n"
     )
-    print(f"wrote {out.relative_to(ROOT)} with {len(entries)} runbooks")
+    print(f"wrote {out.relative_to(ROOT)} with {len(entries)} runbooks and {len(alerts)} alerts")
     return 0
 
 
